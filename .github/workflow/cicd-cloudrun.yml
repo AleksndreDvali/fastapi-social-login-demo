@@ -1,0 +1,60 @@
+name: CI/CD to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: wialon-ab12
+  REGION: europe-west1
+  REPOSITORY: fastapi-social-login           # Artifact Registry repo id
+  SERVICE_NAME: fastapi-social-login         # Cloud Run service name
+  IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Auth to GCP via Workload Identity Federation (created by Terraform)
+      - id: auth
+        name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: github-deployer@wialon-ab12.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:latest"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infra
+        env:
+          TF_VAR_project_id: ${{ env.PROJECT_ID }}
+          TF_VAR_region: ${{ env.REGION }}
+          TF_VAR_service_name: ${{ env.SERVICE_NAME }}
+          TF_VAR_github_repository: "AleksndreDvali/fastapi-social-login-demo"
+        run: terraform apply -auto-approve
