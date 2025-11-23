@@ -15,77 +15,23 @@ provider "google" {
 }
 
 # -------------------------
-# Enable required APIs
+# Project info (used for WIF member strings)
 # -------------------------
 
-resource "google_project_service" "run" {
-  project            = var.project_id
-  service            = "run.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "artifactregistry" {
-  project            = var.project_id
-  service            = "artifactregistry.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "iam" {
-  project            = var.project_id
-  service            = "iam.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "cloudbuild" {
-  project            = var.project_id
-  service            = "cloudbuild.googleapis.com"
-  disable_on_destroy = false
-}
+data "google_project" "project" {}
 
 # -------------------------
-# Artifact Registry
+# GitHub deployer service account
 # -------------------------
-
-resource "google_artifact_registry_repository" "fastapi_social_login_repo" {
-  project       = var.project_id
-  location      = var.region
-  repository_id = var.service_name  # <– repo name
-  description   = "Images for ${var.service_name}"
-  format        = "DOCKER"
-
-
-  depends_on = [
-    google_project_service.artifactregistry
-  ]
-}
-
-# -------------------------
-# Service Accounts
-# -------------------------
-
-resource "google_service_account" "cloud_run_sa" {
-  account_id   = "cloud-run-sa"
-  display_name = "Cloud Run Runtime SA"
-}
 
 resource "google_service_account" "github_deployer" {
   account_id   = "github-deployer"
   display_name = "GitHub Deployer SA"
 }
 
-# Allow Cloud Run SA to read images from Artifact Registry
-resource "google_artifact_registry_repository_iam_member" "cloud_run_reader" {
-  location   = google_artifact_registry_repository.fastapi_social_login_repo.location
-  repository = google_artifact_registry_repository.fastapi_social_login_repo.name
-  role       = "roles/artifactregistry.reader"
-  member     = "serviceAccount:${google_service_account.cloud_run_sa.email}"
-}
-
 # -------------------------
 # Workload Identity Federation for GitHub
 # -------------------------
-
-data "google_project" "project" {}
 
 resource "google_iam_workload_identity_pool" "github_pool" {
   workload_identity_pool_id = "github-pool"
@@ -98,22 +44,22 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
   workload_identity_pool_provider_id = "github-provider"
   display_name                       = "GitHub OIDC Provider"
 
+  # Map GitHub OIDC token fields into attributes
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
   }
 
-  # 🔐 Allow only your repo to use this provider
-  # (owner/repo must match your GitHub repo exactly)
-  attribute_condition = "assertion.repository=='AleksndreDvali/fastapi-social-login-demo'"
+  # Restrict this provider to your specific GitHub repo
+  # Make sure var.github_repository = "AleksndreDvali/fastapi-social-login-demo"
+  attribute_condition = "assertion.repository=='${var.github_repository}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
 }
 
-
-# Allow GitHub identities (for this specific repo) to impersonate github_deployer SA
+# Allow GitHub identities from this pool to impersonate the github_deployer SA
 resource "google_service_account_iam_member" "github_deployer_wif" {
   service_account_id = google_service_account.github_deployer.name
   role               = "roles/iam.workloadIdentityUser"
@@ -122,10 +68,12 @@ resource "google_service_account_iam_member" "github_deployer_wif" {
 }
 
 # -------------------------
-# IAM for deployer SA
+# IAM roles for GitHub deployer SA
 # -------------------------
-
-# Allow GitHub deployer to read / manage project services (APIs)
+# These are the roles used by your CI to:
+# - build & push images
+# - deploy to Cloud Run
+# - act as other service accounts (runtime SA, etc.)
 
 resource "google_project_iam_member" "deployer_run_admin" {
   project = var.project_id
@@ -145,43 +93,36 @@ resource "google_project_iam_member" "deployer_sa_user" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
-
-
-# -------------------------
-# Cloud Run Service
-# -------------------------
-
-# Image that GitHub Actions will build & push
-locals {
-  fastapi_social_login_image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.fastapi_social_login_repo.repository_id}/${var.service_name}:latest"
+# If you decide to use Cloud Build in CI (gcloud builds submit)
+resource "google_project_iam_member" "deployer_cloudbuild" {
+  project = var.project_id
+  role    = "roles/cloudbuild.builds.editor"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
+# NOTE: we no longer manage google_project_service, Artifact Registry repo,
+# Cloud Run service, or the runtime SA here – those are created by bootstrap_cloudrun.sh
+# and then updated by gcloud run deploy from GitHub Actions.
 
-resource "google_cloud_run_v2_service" "fastapi_social_login" {
-  name     = var.service_name   # service name
+# -------------------------
+# (Optional) Read existing Cloud Run service for URL output
+# -------------------------
+
+data "google_cloud_run_v2_service" "fastapi_social_login" {
+  name     = var.service_name   # e.g. "fastapi-social-login"
   location = var.region
-
-  template {
-    service_account = google_service_account.cloud_run_sa.email
-
-    containers {
-      image = local.fastapi_social_login_image
-
-      ports {
-        container_port = 8000
-      }
-    }
-  }
-
-  traffic {
-    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
-    percent = 100
-  }
 }
 
-# Allow public (unauthenticated) access
-resource "google_cloud_run_v2_service_iam_member" "fastapi_social_login_public" {
-  name   = "projects/${var.project_id}/locations/${var.region}/services/${google_cloud_run_v2_service.fastapi_social_login.name}"
-  role   = "roles/run.invoker"
-  member = "allUsers"
+# -------------------------
+# Outputs
+# -------------------------
+
+output "cloud_run_url" {
+  value       = data.google_cloud_run_v2_service.fastapi_social_login.uri
+  description = "Existing Cloud Run service URL"
+}
+
+output "github_workload_identity_provider" {
+  value       = google_iam_workload_identity_pool_provider.github_provider.name
+  description = "Use this in GitHub secret GCP_WORKLOAD_IDENTITY_PROVIDER"
 }
