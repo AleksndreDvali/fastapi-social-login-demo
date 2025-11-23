@@ -125,6 +125,13 @@ resource "google_service_account_iam_member" "github_deployer_wif" {
 # IAM for deployer SA
 # -------------------------
 
+# Allow GitHub deployer to read / manage project services (APIs)
+resource "google_project_iam_member" "deployer_serviceusage_admin" {
+  project = var.project_id
+  role = "roles/serviceusage.serviceUsageAdmin"  # can also use  "roles/serviceusage.serviceUsageViewer"
+  member  = "serviceAccount:${google_service_account.github_deployer.email}"
+}
+
 resource "google_project_iam_member" "deployer_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
@@ -143,12 +150,7 @@ resource "google_project_iam_member" "deployer_sa_user" {
   member  = "serviceAccount:${google_service_account.github_deployer.email}"
 }
 
-# Allow GitHub deployer to read / manage project services (APIs)
-resource "google_project_iam_member" "deployer_serviceusage_admin" {
-  project = var.project_id
-  role = "roles/serviceusage.serviceUsageViewer"  # can also use  "roles/serviceusage.serviceUsageAdmin"
-  member  = "serviceAccount:${google_service_account.github_deployer.email}"
-}
+
 
 # -------------------------
 # Cloud Run Service
