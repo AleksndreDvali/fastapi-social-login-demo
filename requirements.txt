@@ -1,4 +1,4 @@
 # --- FastAPI Core ---
 fastapi==0.121.2
-uvicorn==0.35.0
+uvicorn[standard]==0.35.0
 

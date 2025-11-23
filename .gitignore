@@ -81,3 +81,8 @@ override.tf.json
 *_override.tf.json
 terraform.tfvars
 terraform.tfvars.json
+
+# -------------------------
+# SA github-deployer-key
+# -------------------------
+github-deployer-key.json

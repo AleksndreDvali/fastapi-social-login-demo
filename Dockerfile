@@ -1,12 +1,18 @@
+# Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
 
+# install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
+# copy app
+COPY . .
 
-EXPOSE 8000
+# Cloud Run expects PORT env var (we'll set 8080)
+ENV PORT 8080
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# expose port and start uvicorn
+EXPOSE 8080
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

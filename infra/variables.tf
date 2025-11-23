@@ -9,12 +9,8 @@ variable "region" {
   default     = "europe-west1"
 }
 
-variable "github_repository" {
-  type        = string
-  description = "GitHub repo in the form owner/repo"
-}
-
 variable "service_name" {
   type        = string
   description = "Cloud Run service name"
+  default     = "fastapi-social-login"
 }
