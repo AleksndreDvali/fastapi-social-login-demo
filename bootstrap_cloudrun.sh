@@ -1,10 +1,23 @@
 #!/usr/bin/env bash
 
-gcloud config set project wialon-ab12
+# Define your project ID once
+PROJECT_ID="wialon-ab34"
 
-# Create github-deployer SA
+# Set the project in gcloud config
+gcloud config set project "$PROJECT_ID"
+
+# Create GitHub-deployer service account
 gcloud iam service-accounts create github-deployer \
   --display-name="GitHub CI/CD deployer"
+
+
+
+# (Optional) Print out what you're about to do
+echo "Service account to use: $SA"
+
+# Enable IAM API
+gcloud services enable iam.googleapis.com --project=$PROJECT_ID
+gcloud services enable cloudresourcemanager.googleapis.com --project=$PROJECT_ID
 
 
 # Give it ability to:
@@ -15,8 +28,8 @@ gcloud iam service-accounts create github-deployer \
 
 # * act as the runtime SA
 
-SA="github-deployer@wialon-ab12.iam.gserviceaccount.com"
-PROJECT_ID="wialon-ab12"
+# Construct the service account email using PROJECT_ID
+SA="github-deployer@${PROJECT_ID}.iam.gserviceaccount.com"
 
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:$SA" \
@@ -34,11 +47,11 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:$SA" \
   --role="roles/iam.serviceAccountUser"
 
-# Create the Artifact Registry repo
-gcloud artifacts repositories create fastapi-social-login \
-  --repository-format=docker \
-  --location=europe-west1 \
-  --description="Images for fastapi-social-login"
+# # Create the Artifact Registry repo
+# gcloud artifacts repositories create fastapi-social-login \
+#   --repository-format=docker \
+#   --location=europe-west1 \
+#   --description="Images for fastapi-social-login"
 
 # Create a JSON key and store in GitHub
 
