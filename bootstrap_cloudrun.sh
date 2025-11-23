@@ -44,3 +44,38 @@ gcloud artifacts repositories create fastapi-social-login \
 
 gcloud iam service-accounts keys create github-deployer-key.json \
   --iam-account="$SA"
+
+
+# Directory to put the file
+dir=".vscode"
+
+# Check if the directory exists, if not — create it
+if [ ! -d "$dir" ]; then
+  mkdir -p "$dir"
+fi
+
+# Now write the JSON into .vscode/launch.json
+cat <<EOF > "$dir/launch.json"
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "FastAPI (Uvicorn)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "app.main:app",
+                "--host", "0.0.0.0",
+                "--port", "8080",
+                "--reload"
+            ],
+            "jinja": true,
+            "console": "integratedTerminal",
+            "env": {
+                "VAR": "value",
+            }
+        }
+    ]
+}
+EOF
