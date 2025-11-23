@@ -126,11 +126,6 @@ resource "google_service_account_iam_member" "github_deployer_wif" {
 # -------------------------
 
 # Allow GitHub deployer to read / manage project services (APIs)
-resource "google_project_iam_member" "deployer_serviceusage_admin" {
-  project = var.project_id
-  role = "roles/serviceusage.serviceUsageAdmin"  # can also use  "roles/serviceusage.serviceUsageViewer"
-  member  = "serviceAccount:${google_service_account.github_deployer.email}"
-}
 
 resource "google_project_iam_member" "deployer_run_admin" {
   project = var.project_id
