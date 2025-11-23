@@ -34,7 +34,11 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:$SA" \
   --role="roles/iam.serviceAccountUser"
 
-
+# Create the Artifact Registry repo
+gcloud artifacts repositories create fastapi-social-login \
+  --repository-format=docker \
+  --location=europe-west1 \
+  --description="Images for fastapi-social-login"
 
 # Create a JSON key and store in GitHub
 
